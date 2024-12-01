@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -36,26 +37,22 @@ fn parse_input_file(filename: &str) -> Result<(Vec<i32>, Vec<i32>), Box<dyn Erro
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Parse the input file
-    let (mut left_numbers, mut right_numbers) = parse_input_file("input.txt")?;
+    let (left_numbers, right_numbers) = parse_input_file("input.txt")?;
 
-    // Check if both lists have the same length
-    if left_numbers.len() != right_numbers.len() {
-        return Err("The left and right lists have different lengths.".into());
+    // Build a frequency map for the right numbers
+    let mut right_freq = HashMap::new();
+    for num in right_numbers {
+        *right_freq.entry(num).or_insert(0) += 1;
     }
 
-    // Sort both lists
-    left_numbers.sort();
-    right_numbers.sort();
-
-    // Compute the sum of absolute differences
-    let total_distance: i32 = left_numbers
+    // Compute the similarity score
+    let similarity_score: i32 = left_numbers
         .iter()
-        .zip(right_numbers.iter())
-        .map(|(l, r)| (l - r).abs())
+        .map(|&num| num * right_freq.get(&num).unwrap_or(&0))
         .sum();
 
-    // Output the total distance
-    println!("Total distance: {}", total_distance);
+    // Output the similarity score
+    println!("Similarity score: {}", similarity_score);
 
     Ok(())
 }
