@@ -20,6 +20,16 @@ fn main() {
                 // Check if the report is safe
                 if is_safe(&levels) {
                     safe_reports += 1;
+                } else {
+                    for i in 0..levels.len() {
+                        let mut modified_levels = levels.clone();
+                        modified_levels.remove(i);
+                        if is_safe(&modified_levels) {
+                            safe_reports += 1;
+                            // Stop checking after finding one valid removal
+                            break;
+                        }
+                    }
                 }
             }
         }
