@@ -16,50 +16,43 @@ fn main() -> io::Result<()> {
     }
 
     let rows = grid.len();
-    if rows == 0 {
+    if rows < 3 {
         println!("0");
         return Ok(());
     }
     let cols = grid[0].len();
+    if cols < 3 {
+        println!("0");
+        return Ok(());
+    }
 
-    let word = "XMAS";
-    let word_len = word.len();
-    let word_chars: Vec<char> = word.chars().collect();
-
-    let directions = [
-        (-1, -1), // NW
-        (-1, 0),  // N
-        (-1, 1),  // NE
-        (0, -1),  // W
-        (0, 1),   // E
-        (1, -1),  // SW
-        (1, 0),   // S
-        (1, 1),   // SE
-    ];
+    let word_variants = [vec!['M', 'A', 'S'], vec!['S', 'A', 'M']];
 
     let mut count = 0;
 
-    for row in 0..rows {
-        for col in 0..cols {
-            for &(dr, dc) in &directions {
-                let mut r = row as isize;
-                let mut c = col as isize;
-                let mut matched = true;
+    // Start from 1 to rows-2 to avoid index out of bounds
+    for row in 1..rows - 1 {
+        for col in 1..cols - 1 {
+            // For each combination of word variants on both diagonals
+            for nw_se in &word_variants {
+                for ne_sw in &word_variants {
 
-                for i in 0..word_len {
-                    if r < 0 || r >= rows as isize || c < 0 || c >= cols as isize {
-                        matched = false;
-                        break;
+                    // NW-SE diagonal
+                    if grid[row - 1][col - 1] != nw_se[0]
+                        || grid[row][col] != nw_se[1]
+                        || grid[row + 1][col + 1] != nw_se[2]
+                    {
+                        continue;
                     }
-                    if grid[r as usize][c as usize] != word_chars[i] {
-                        matched = false;
-                        break;
-                    }
-                    r += dr;
-                    c += dc;
-                }
 
-                if matched {
+                    // NE-SW diagonal
+                    if grid[row - 1][col + 1] != ne_sw[0]
+                        || grid[row][col] != ne_sw[1]
+                        || grid[row + 1][col - 1] != ne_sw[2]
+                    {
+                        continue;
+                    }
+
                     count += 1;
                 }
             }
