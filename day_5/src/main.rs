@@ -1,53 +1,39 @@
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 
-/// Performs a topological sort on the given pages based on the provided ordering rules.
+/// Performs a topological sort on the provided ordering rules.
 ///
 /// # Arguments
 ///
-/// * `pages` - A reference to a vector of page numbers included in the update.
-///   This is used to filter relevant ordering rules.
-/// * `ordering_rules` - A reference to a vector of tuples `(u32, u32)` representing the ordering rules. 
-///   Each tuple specifies that the first page must come before the second if both are present in the update.
+/// * `ordering_rules` - A reference to a vector of tuples `(u32, u32)` representing the ordering rules.
 ///
 /// # Returns
 ///
-/// A vector of page numbers sorted in an order that respects the given ordering rules. 
-/// If a valid topological order cannot be established (e.g., due to cycles in the graph), 
+/// If a valid topological order cannot be established (e.g., due to cycles in the graph),
 /// the returned vector may be incomplete.
-fn topological_sort(
-    pages: &Vec<u32>,
-    ordering_rules: &Vec<(u32, u32)>,
-) -> Vec<u32> {
+fn topological_sort(ordering_rules: &Vec<(u32, u32)>) -> Vec<u32> {
     // Build a graph for the pages in the update
     let mut graph: HashMap<u32, Vec<u32>> = HashMap::new();
     let mut in_degree: HashMap<u32, usize> = HashMap::new();
 
-    // Initialize the graph nodes and in-degree counts
-    for &page in pages {
-        graph.entry(page).or_insert(Vec::new());
-        in_degree.entry(page).or_insert(0);
-    }
-
     // Add edges based on ordering rules
     for &(x, y) in ordering_rules {
-        if pages.contains(&x) && pages.contains(&y) {
-            graph.get_mut(&x).unwrap().push(y);
-            *in_degree.get_mut(&y).unwrap() += 1;
-        }
+        in_degree.entry(x).or_insert(0);
+        graph.entry(x).or_default().push(y);
+        *in_degree.entry(y).or_insert(0) += 1;
     }
 
     let mut queue: VecDeque<u32> = VecDeque::new();
-    for (&page, &deg) in in_degree.iter() {
+    for (&v, &deg) in in_degree.iter() {
         if deg == 0 {
-            queue.push_back(page);
+            queue.push_back(v);
         }
     }
 
-    let mut sorted_pages = Vec::new();
-    while let Some(page) = queue.pop_front() {
-        sorted_pages.push(page);
-        if let Some(neighbors) = graph.get(&page) {
+    let mut sorted = Vec::new();
+    while let Some(v) = queue.pop_front() {
+        sorted.push(v);
+        if let Some(neighbors) = graph.get(&v) {
             for &neighbor in neighbors {
                 let deg = in_degree.get_mut(&neighbor).unwrap();
                 *deg -= 1;
@@ -58,7 +44,7 @@ fn topological_sort(
         }
     }
 
-    sorted_pages
+    sorted
 }
 
 fn main() {
@@ -90,8 +76,15 @@ fn main() {
             .map(|s| s.trim().parse::<u32>().unwrap())
             .collect();
 
+        // Filter the ordering_rules to only include those relevant for the current pages
+        let filtered_rules: Vec<(u32, u32)> = ordering_rules
+            .iter()
+            .filter(|(x, y)| pages.contains(x) && pages.contains(y))
+            .cloned()
+            .collect();
+
         // Sort the pages based on the ordering rules
-        let sorted_pages = topological_sort(&pages, &ordering_rules);
+        let sorted_pages = topological_sort(&filtered_rules);
 
         // Check if topological sort is possible (i.e., no cycles)
         if sorted_pages.len() != pages.len() {
