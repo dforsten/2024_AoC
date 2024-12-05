@@ -1,3 +1,4 @@
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 
 fn main() {
@@ -30,26 +31,64 @@ fn main() {
             .collect();
 
         // Map page number to its position in the update
-        let mut position = std::collections::HashMap::new();
+        let mut position = HashMap::new();
         for (idx, &page) in pages.iter().enumerate() {
             position.insert(page, idx);
         }
 
-        // Check if the update is in the correct order
-        let mut valid = true;
+        // Build a graph for the pages in the update
+        let mut graph: HashMap<u32, Vec<u32>> = HashMap::new();
+        let mut in_degree: HashMap<u32, usize> = HashMap::new();
+
+        // Initialize the graph nodes and in-degree counts
+        for &page in &pages {
+            graph.entry(page).or_insert(Vec::new());
+            in_degree.entry(page).or_insert(0);
+        }
+
+        // Add edges based on ordering rules
         for &(x, y) in &ordering_rules {
-            if let (Some(&pos_x), Some(&pos_y)) = (position.get(&x), position.get(&y)) {
-                if pos_x >= pos_y {
-                    valid = false;
-                    break;
+            if position.contains_key(&x) && position.contains_key(&y) {
+                graph.get_mut(&x).unwrap().push(y);
+                *in_degree.get_mut(&y).unwrap() += 1;
+            }
+        }
+
+        // Perform topological sort (Kahn's algorithm)
+        let mut queue: VecDeque<u32> = VecDeque::new();
+        for (&page, &deg) in &in_degree {
+            if deg == 0 {
+                queue.push_back(page);
+            }
+        }
+
+        let mut sorted_pages = Vec::new();
+        while let Some(page) = queue.pop_front() {
+            sorted_pages.push(page);
+            if let Some(neighbors) = graph.get(&page) {
+                for &neighbor in neighbors {
+                    let deg = in_degree.get_mut(&neighbor).unwrap();
+                    *deg -= 1;
+                    if *deg == 0 {
+                        queue.push_back(neighbor);
+                    }
                 }
             }
         }
 
-        // If valid, add the middle page number to the total
-        if valid {
-            let middle_index = pages.len() / 2;
-            total += pages[middle_index];
+        // Check if topological sort is possible (i.e., no cycles)
+        if sorted_pages.len() != pages.len() {
+            println!("Cycle detected in ordering rules for update: {:?}", pages);
+            continue; // Skip this update if there's a cycle
+        }
+
+        // Compare the sorted pages with the original pages to check if the update was in correct order
+        let is_valid = pages == sorted_pages;
+
+        if !is_valid {
+            // The update was incorrectly ordered; use the sorted_pages for the corrected order
+            let middle_index = sorted_pages.len() / 2;
+            total += sorted_pages[middle_index];
         }
     }
 
