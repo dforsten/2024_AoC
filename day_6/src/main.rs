@@ -1,7 +1,8 @@
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Direction {
     Up,
     Down,
@@ -44,45 +45,34 @@ fn find_guard_position_and_direction(map: &[Vec<char>]) -> Option<(usize, usize,
     None
 }
 
-fn main() {
-    let file = File::open("input.txt").expect("Could not open input file");
-    let reader = BufReader::new(file);
-
-    let mut map: Vec<Vec<char>> = Vec::new();
-    for line in reader.lines() {
-        map.push(line.unwrap().chars().collect());
-    }
-
+/// Simulate the guard's movement on the given map.
+/// Returns true if a loop is detected, false otherwise.
+fn simulate(map: &[Vec<char>], start_row: usize, start_col: usize, start_dir: Direction) -> bool {
     let rows = map.len();
     let cols = if rows > 0 { map[0].len() } else { 0 };
 
-    // Locate guard's initial position and direction
-    let (mut guard_row, mut guard_col, mut guard_dir) =
-        find_guard_position_and_direction(&map).expect("Guard not found in the map");
+    let mut guard_row = start_row;
+    let mut guard_col = start_col;
+    let mut guard_dir = start_dir;
 
-    // Keep track of visited positions
-    use std::collections::HashSet;
-    let mut visited = HashSet::new();
-    visited.insert((guard_row, guard_col));
+    // Keep track of visited states: (row, col, direction)
+    let mut visited_states = HashSet::new();
+    visited_states.insert((guard_row, guard_col, guard_dir));
 
     loop {
-        // Determine if there is something in front of the guard
         let (dr, dc) = guard_dir.forward_offset();
-
-        // Compute the new position in isize to handle negatives
         let front_r_isize = guard_row as isize + dr;
         let front_c_isize = guard_col as isize + dc;
 
-        // Explicitly check for negative or out-of-bounds values
+        // If out of bounds, guard leaves the area - no loop
         if front_r_isize < 0
             || front_c_isize < 0
             || front_r_isize >= rows as isize
             || front_c_isize >= cols as isize
         {
-            break;
+            return false;
         }
 
-        // Convert to usize after bounds have been validated
         let front_r = front_r_isize as usize;
         let front_c = front_c_isize as usize;
 
@@ -93,15 +83,52 @@ fn main() {
             // Move forward
             guard_row = front_r;
             guard_col = front_c;
-            visited.insert((guard_row, guard_col));
 
-            // Check if we left the area after moving
-            if guard_row >= rows || guard_col >= cols {
-                break;
+            // Check if we've been in this state before
+            if visited_states.contains(&(guard_row, guard_col, guard_dir)) {
+                // Loop detected
+                return true;
+            }
+            visited_states.insert((guard_row, guard_col, guard_dir));
+        }
+    }
+}
+
+fn main() {
+    let file = File::open("input.txt").expect("Could not open input file");
+    let reader = BufReader::new(file);
+
+    let mut map: Vec<Vec<char>> = Vec::new();
+    for line in reader.lines() {
+        map.push(line.unwrap().chars().collect());
+    }
+
+    // Find the guard's initial position and direction
+    let (guard_row, guard_col, guard_dir) =
+        find_guard_position_and_direction(&map).expect("Guard not found in the map");
+
+    let rows = map.len();
+    let cols = if rows > 0 { map[0].len() } else { 0 };
+
+    let mut loop_positions_count = 0;
+
+    // Try placing a new obstruction in every possible cell that:
+    // - Is not the guard's starting position
+    // - Is not currently an obstruction or the guard itself
+    for r in 0..rows {
+        for c in 0..cols {
+            if (r, c) != (guard_row, guard_col) && map[r][c] != '#' && map[r][c] != '^' && map[r][c] != 'v' && map[r][c] != '<' && map[r][c] != '>' {
+                // Temporarily place an obstacle
+                let mut test_map = map.clone();
+                test_map[r][c] = '#';
+
+                // Simulate and check for loop
+                if simulate(&test_map, guard_row, guard_col, guard_dir) {
+                    loop_positions_count += 1;
+                }
             }
         }
     }
 
-    // Print the number of distinct visited positions
-    println!("{}", visited.len());
+    println!("{}", loop_positions_count);
 }
