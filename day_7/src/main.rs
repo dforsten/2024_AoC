@@ -1,6 +1,15 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
+fn concat_nums(a: i64, b: i64) -> Option<i64> {
+    // Concatenation: if a=12 and b=345, result=12345
+    // Convert to string and parse back:
+    let a_str = a.to_string();
+    let b_str = b.to_string();
+    let concat_str = format!("{}{}", a_str, b_str);
+    concat_str.parse::<i64>().ok()
+}
+
 fn main() -> std::io::Result<()> {
     let file = File::open("input.txt")?;
     let reader = BufReader::new(file);
@@ -9,11 +18,11 @@ fn main() -> std::io::Result<()> {
 
     for line_res in reader.lines() {
         let line = line_res?;
-        if line.trim().is_empty() {
+        let line = line.trim();
+        if line.is_empty() {
             continue;
         }
 
-        // Split into target and sequence
         let parts: Vec<&str> = line.split(':').collect();
         if parts.len() != 2 {
             continue;
@@ -33,7 +42,7 @@ fn main() -> std::io::Result<()> {
             Err(_) => continue,
         };
 
-        // If there's only one number, just check if it equals the target.
+        // If only one number, just check equality
         if numbers.len() == 1 {
             if numbers[0] == target {
                 total_calibration_result += target;
@@ -45,24 +54,47 @@ fn main() -> std::io::Result<()> {
         let operator_count = num_count - 1;
         let mut found_solution = false;
 
-        // Try all combinations of operators
-        // Each operator can be '+' or '*', so 2^(operator_count) combinations
-        for mask in 0..(1 << operator_count) {
+        // We now have three operators: +, *, ||
+        // We will represent them with 0, 1, 2 for (e.g.) +, *, ||
+        // So we try all combinations from 0..3^(operator_count)
+        let total_combinations = 3_usize.pow(operator_count as u32);
+
+        for comb in 0..total_combinations {
             let mut result = numbers[0];
+            let mut current_comb = comb;
+            let mut valid = true;
+
             for i in 0..operator_count {
+                // Interpret current_comb as a base-3 number
+                let op = current_comb % 3;
+                current_comb /= 3;
                 let next_num = numbers[i + 1];
-                // Determine operator from mask
-                let use_multiply = (mask & (1 << i)) != 0;
-                if use_multiply {
-                    // Multiply
-                    result = result * next_num;
-                } else {
-                    // Add
-                    result = result + next_num;
+
+                match op {
+                    0 => {
+                        // +
+                        result = result.checked_add(next_num).expect("Overflow");
+                    }
+                    1 => {
+                        // *
+                        result = result.checked_mul(next_num).expect("Overflow");
+                    }
+                    2 => {
+                        // ||
+                        match concat_nums(result, next_num) {
+                            Some(concat_val) => result = concat_val,
+                            None => {
+                                // If parsing fails or overflow occurs, mark invalid and break
+                                valid = false;
+                                break;
+                            }
+                        }
+                    }
+                    _ => unreachable!(),
                 }
             }
 
-            if result == target {
+            if valid && result == target {
                 found_solution = true;
                 break;
             }
@@ -74,5 +106,6 @@ fn main() -> std::io::Result<()> {
     }
 
     println!("{}", total_calibration_result);
+
     Ok(())
 }
