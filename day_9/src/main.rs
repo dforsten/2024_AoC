@@ -11,64 +11,106 @@ fn main() {
         .map(|c| c.to_digit(10).unwrap() as usize)
         .collect();
 
-    // We know the pattern is file_length, free_length, file_length, free_length, ..., possibly ending in a file_length.
-    // Let's extract these.
+    // Parse file/free pairs
     let mut files_free_pairs = Vec::new();
-
-    let mut i = 0;
-    while i < digits.len() {
-        // File length
-        let file_len = digits[i];
-        i += 1;
-
-        // The next segment should be free length, unless we are at the end and it must be a file length (odd count)
-        let mut free_len = 0;
-        if i < digits.len() {
-            free_len = digits[i];
-            i += 1;
-        }
+    let mut idx = 0;
+    while idx < digits.len() {
+        let file_len = digits[idx];
+        idx += 1;
+        let free_len = if idx < digits.len() {
+            let fl = digits[idx];
+            idx += 1;
+            fl
+        } else {
+            0
+        };
         files_free_pairs.push((file_len, free_len));
     }
 
-    // Next, build the actual disk layout.
-    // We'll assign file IDs in the order files appear.
+    // Build the disk layout (file_id assigned in appearance order)
     let mut disk = Vec::new();
+    let mut max_file_id = 0;
     for (i, (file_len, free_len)) in files_free_pairs.iter().enumerate() {
-        if *file_len > 0 {
-            for _ in 0..*file_len {
-                disk.push(Some(i));
-            }
+        for _ in 0..*file_len {
+            disk.push(Some(i));
         }
-        if *free_len > 0 {
-            for _ in 0..*free_len {
-                disk.push(None);
-            }
+
+        max_file_id = i;
+
+        for _ in 0..*free_len {
+            disk.push(None);
         }
     }
 
-    // Now perform the compaction.
-    // The process: while there is a gap (None) somewhere before the last file block, move a block from the end.
-    loop {
-        // Find leftmost free block
-        let free_pos = match disk.iter().position(|&x| x.is_none()) {
-            Some(pos) => pos,
-            None => break, // no free space, we're done
-        };
+    // A helper function to find the continuous blocks of a given file.
+    fn file_blocks(disk: &[Option<usize>], file_id: usize) -> Vec<usize> {
+        disk.iter()
+            .enumerate()
+            .filter_map(|(pos, &block)| {
+                if block == Some(file_id) {
+                    Some(pos)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
 
-        // Find the rightmost file block
-        let right_file_pos = match disk.iter().rposition(|&x| x.is_some()) {
-            Some(pos) => pos,
-            None => break, // no file blocks to move
-        };
-
-        if right_file_pos <= free_pos {
-            // All files are to the left of this free position, so we can't fill it
-            break;
+    // A helper function to find a contiguous free segment of a given length
+    // to the left of a certain position. We'll look from the start of the disk
+    // up to (but not including) the start_pos, searching for a contiguous run of None.
+    fn find_free_segment(disk: &[Option<usize>], length: usize, limit: usize) -> Option<usize> {
+        if length == 0 {
+            return None;
         }
 
-        // Move the file block from right_file_pos to free_pos
-        let file_id = disk[right_file_pos].take();
-        disk[free_pos] = file_id;
+        let mut start: Option<usize> = None;
+        let mut count = 0;
+
+        for i in 0..limit {
+            if disk[i].is_none() {
+                if start.is_none() {
+                    start = Some(i);
+                }
+                count += 1;
+                if count == length {
+                    // Found a segment
+                    return start;
+                }
+            } else {
+                start = None;
+                count = 0;
+            }
+        }
+
+        None
+    }
+
+    // Move files in order of decreasing file ID
+    for fid in (0..=max_file_id).rev() {
+        // Identify the file's current blocks
+        let blocks = file_blocks(&disk, fid);
+        if blocks.is_empty() {
+            continue; // This file might have length zero or something unexpected
+        }
+        let file_len = blocks.len();
+        let file_start = blocks[0];
+
+        // Find a free segment to the left of file_start that fits file_len
+        if let Some(free_start) = find_free_segment(&disk, file_len, file_start) {
+            // Move the file there
+            // First, clear the old file location
+            for &pos in &blocks {
+                disk[pos] = None;
+            }
+
+            // Place the file starting at free_start
+            for offset in 0..file_len {
+                disk[free_start + offset] = Some(fid);
+            }
+        } else {
+            // No suitable free segment found; file stays put.
+        }
     }
 
     // Compute the checksum: sum of position * file_id for all file blocks
