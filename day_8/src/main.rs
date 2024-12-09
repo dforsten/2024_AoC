@@ -2,8 +2,18 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
+fn gcd(a: isize, b: isize) -> isize {
+    let mut a = a.abs();
+    let mut b = b.abs();
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    a
+}
+
 fn main() {
-    // Read the input map
     let file = File::open("input.txt").expect("Failed to open input.txt");
     let reader = BufReader::new(file);
 
@@ -16,9 +26,8 @@ fn main() {
     let rows = map.len();
     let cols = if rows > 0 { map[0].len() } else { 0 };
 
-    // Collect all antennas: frequency -> list of positions
+    // Collect all antennas by frequency.
     let mut antennas_by_freq: HashMap<char, Vec<(usize, usize)>> = HashMap::new();
-
     for r in 0..rows {
         for c in 0..cols {
             let ch = map[r][c];
@@ -28,47 +37,61 @@ fn main() {
         }
     }
 
-    // For each frequency, consider all pairs of antennas.
-    // For each pair (A,B):
-    //   The two antinodes are:
-    //     N1 = 2 * B - A
-    //     N2 = 2 * A - B
-    // Here A and B are positions (r,c).
-    // We must ensure N1 and N2 are within the map bounds and then record them.
     let mut antinodes = HashSet::new();
+
+    // For each frequency group, consider all pairs of antennas to define lines
     for (_freq, positions) in antennas_by_freq.iter() {
-        // If fewer than 2 antennas for this frequency, no antinodes
         if positions.len() < 2 {
+            // If there's only one antenna of a particular frequency, no antinodes from it.
             continue;
         }
 
-        // Generate all unique pairs
         for i in 0..positions.len() {
             for j in i + 1..positions.len() {
                 let (r1, c1) = positions[i];
                 let (r2, c2) = positions[j];
 
-                // Compute antinodes
-                // N1 = 2 * (r2, c2) - (r1, c1) = (2*r2 - r1, 2*c2 - c1)
-                let n1 = (2 * r2 as isize - r1 as isize, 2 * c2 as isize - c1 as isize);
+                let dr = r2 as isize - r1 as isize;
+                let dc = c2 as isize - c1 as isize;
 
-                // N2 = 2 * (r1, c1) - (r2, c2) = (2*r1 - r2, 2*c1 - c2)
-                let n2 = (2 * r1 as isize - r2 as isize, 2 * c1 as isize - c2 as isize);
+                // Reduce the direction vector to its smallest step
+                let g = gcd(dr, dc);
+                let dr_step = dr / g;
+                let dc_step = dc / g;
 
-                // Check boundaries and add if within the map
-                if n1.0 >= 0 && n1.0 < rows as isize && n1.1 >= 0 && n1.1 < cols as isize {
-                    antinodes.insert((n1.0 as usize, n1.1 as usize));
+                // We will use (r1, c1) as an anchor and go in both directions along the line.
+
+                // Direction 1: forward line
+                {
+                    let mut k = 0isize;
+                    loop {
+                        let rr = r1 as isize + k * dr_step;
+                        let cc = c1 as isize + k * dc_step;
+                        if rr < 0 || rr >= rows as isize || cc < 0 || cc >= cols as isize {
+                            break;
+                        }
+                        antinodes.insert((rr as usize, cc as usize));
+                        k += 1;
+                    }
                 }
 
-                if n2.0 >= 0 && n2.0 < rows as isize && n2.1 >= 0 && n2.1 < cols as isize {
-                    antinodes.insert((n2.0 as usize, n2.1 as usize));
+                // Direction 2: backward line
+                {
+                    let mut k = -1isize;
+                    loop {
+                        let rr = r1 as isize + k * dr_step;
+                        let cc = c1 as isize + k * dc_step;
+                        if rr < 0 || rr >= rows as isize || cc < 0 || cc >= cols as isize {
+                            break;
+                        }
+                        antinodes.insert((rr as usize, cc as usize));
+                        k -= 1;
+                    }
                 }
             }
         }
     }
 
-    // The result is the count of unique antinodes
     let result = antinodes.len();
-
     println!("{}", result);
 }
