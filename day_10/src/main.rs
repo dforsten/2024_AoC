@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs;
 
 fn main() {
@@ -9,23 +8,21 @@ fn main() {
     let rows = lines.len();
     let cols = lines[0].len();
 
-    let mut map = Vec::with_capacity(rows);
-    for line in lines {
-        let row: Vec<u8> = line
-            .chars()
-            .map(|c| c.to_digit(10).unwrap() as u8)
-            .collect();
-        map.push(row);
-    }
+    let map: Vec<Vec<u8>> = lines
+        .iter()
+        .map(|line| {
+            line.chars()
+                .map(|c| c.to_digit(10).unwrap() as u8)
+                .collect()
+        })
+        .collect();
 
-    // We'll need to memoize the results. For each cell, we store the set of reachable endpoints (9-cells).
-    // Use an Option to represent uncomputed, and Some(HashSet) for computed.
-    let mut memo: Vec<Vec<Option<HashSet<(usize, usize)>>>> = vec![vec![None; cols]; rows];
+    // Memoization structures
+    let mut paths_memo: Vec<Vec<Option<u128>>> = vec![vec![None; cols]; rows];
 
-    // Directions for up/down/left/right
     let directions = [(-1, 0), (1, 0), (0, -1), (0, 1)];
 
-    // Find all trailheads (height 0 cells)
+    // Identify trailheads
     let mut trailheads = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
@@ -35,60 +32,55 @@ fn main() {
         }
     }
 
-    // Compute the score for each trailhead
-    let mut total_score = 0;
+    // Compute score and rating for each trailhead
+    // Rating = number of distinct hiking trails (paths) from that cell
+    let mut total_rating = 0u128;
     for &(r, c) in &trailheads {
-        let endpoints = dfs(r, c, &map, &mut memo, &directions);
-        total_score += endpoints.len();
+        let rating = get_paths(r, c, &map, &mut paths_memo, &directions);
+        total_rating = total_rating.saturating_add(rating);
     }
 
-    // Print the sum of the scores
-    println!("{}", total_score);
+    // Print the sum of the ratings of all trailheads
+    println!("{}", total_rating);
 }
 
-// Define a recursive function with memoization:
-// Returns the set of (r,c) positions of height 9 reachable from cell (r,c).
-fn dfs(
+// DFS to get number of distinct paths
+fn get_paths(
     r: usize,
     c: usize,
     map: &Vec<Vec<u8>>,
-    memo: &mut Vec<Vec<Option<HashSet<(usize, usize)>>>>,
+    memo: &mut Vec<Vec<Option<u128>>>,
     dirs: &[(i32, i32)],
-) -> HashSet<(usize, usize)> {
-    if let Some(ref stored) = memo[r][c] {
-        return stored.clone();
+) -> u128 {
+    if let Some(val) = memo[r][c] {
+        return val;
     }
 
     let h = map[r][c];
-    // If this cell is height 9, it's an endpoint
-    if h == 9 {
-        let mut set = HashSet::new();
-        set.insert((r, c));
-        memo[r][c] = Some(set.clone());
-        return set;
-    }
-
-    // Otherwise, we need to explore neighbors of height h+1
-    let mut result = HashSet::new();
     let rows = map.len();
     let cols = map[0].len();
 
+    // If height = 9, there's exactly one path: this cell itself is the endpoint
+    if h == 9 {
+        memo[r][c] = Some(1);
+        return 1;
+    }
+
+    let mut total_paths: u128 = 0;
     let next_h = h + 1;
     for &(dr, dc) in dirs {
-        let nr = (r as i32 + dr) as usize;
-        let nc = (c as i32 + dc) as usize;
-        if (dr < 0 && r == 0) || (dc < 0 && c == 0) || nr >= rows || nc >= cols {
-            continue; // out of bounds
+        let nr = r as i32 + dr;
+        let nc = c as i32 + dc;
+        if nr < 0 || nc < 0 {
+            continue;
         }
-        if map[nr][nc] == next_h {
-            // Recurse
-            let endpoints = dfs(nr, nc, map, memo, dirs);
-            for e in endpoints {
-                result.insert(e);
-            }
+        let nr = nr as usize;
+        let nc = nc as usize;
+        if nr < rows && nc < cols && map[nr][nc] == next_h {
+            total_paths = total_paths.saturating_add(get_paths(nr, nc, map, memo, dirs));
         }
     }
 
-    memo[r][c] = Some(result.clone());
-    result
+    memo[r][c] = Some(total_paths);
+    total_paths
 }
